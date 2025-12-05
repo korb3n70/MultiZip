@@ -56,7 +56,7 @@ $form.Controls.Add($btnDest)
 $btnApriDest = New-Object System.Windows.Forms.Button
 $btnApriDest.Text = "Apri destinazione"
 $btnApriDest.Location = "610,90"
-$btnApriDest.Size = "100,25"
+$btnApriDest.Size = "120,25"
 $btnApriDest.Add_Click({
     if(Test-Path $txtDest.Text){
         Start-Process $txtDest.Text
