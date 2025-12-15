@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Nome dell'output -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+
+    <!-- Abilita WinForms -->
+    <UseWindowsForms>true</UseWindowsForms>
+
+    <!-- Imposta l'icona e altre proprietà opzionali -->
+    <RootNamespace>EstrattoreZipAvanzato</RootNamespace>
+    <AssemblyName>EstrattoreZipAvanzato</AssemblyName>
+
+    <!-- Abilita stili moderni -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Libreria standard per ZIP -->
+    <PackageReference Include="System.IO.Compression" Version="8.0.0" />
+    <PackageReference Include="System.IO.Compression.ZipFile" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>
