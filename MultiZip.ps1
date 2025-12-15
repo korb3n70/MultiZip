@@ -1,13 +1,18 @@
+### ===== FIXED VERSION ===== ###
+##  15/12
+### AVANZAMENTO BARRA ED ETICHETTE DA SISTEMARE 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 ### ===== FORM PRINCIPALE ===== ###
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Estrattore ZIP Avanzato"
-$form.Size = New-Object System.Drawing.Size(750,580)
+$form.Size = New-Object System.Drawing.Size(700,500)
 $form.StartPosition = "CenterScreen"
-$form.Font = New-Object System.Drawing.Font("Segoe UI",10)
-$form.AutoScroll = $true
+
+# Font generale
+$font = New-Object System.Drawing.Font("Segoe UI",10)
+$form.Font = $font
 
 ### ------ LABELS E INPUT ------ ###
 # Sorgente
@@ -19,12 +24,12 @@ $form.Controls.Add($lblSource)
 
 $txtSource = New-Object System.Windows.Forms.TextBox
 $txtSource.Location = "150,18"
-$txtSource.Size = "450,25"
+$txtSource.Size = "350,25"
 $form.Controls.Add($txtSource)
 
 $btnSource = New-Object System.Windows.Forms.Button
 $btnSource.Text = "Sfoglia"
-$btnSource.Location = "610,17"
+$btnSource.Location = "510,17"
 $btnSource.Add_Click({
     $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
     if($dialog.ShowDialog() -eq "OK"){ $txtSource.Text = $dialog.SelectedPath }
@@ -40,12 +45,12 @@ $form.Controls.Add($lblDest)
 
 $txtDest = New-Object System.Windows.Forms.TextBox
 $txtDest.Location = "150,58"
-$txtDest.Size = "450,25"
+$txtDest.Size = "350,25"
 $form.Controls.Add($txtDest)
 
 $btnDest = New-Object System.Windows.Forms.Button
 $btnDest.Text = "Sfoglia"
-$btnDest.Location = "610,57"
+$btnDest.Location = "510,57"
 $btnDest.Add_Click({
     $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
     if($dialog.ShowDialog() -eq "OK"){ $txtDest.Text = $dialog.SelectedPath }
@@ -55,10 +60,9 @@ $form.Controls.Add($btnDest)
 # Apri destinazione
 $btnApriDest = New-Object System.Windows.Forms.Button
 $btnApriDest.Text = "Apri destinazione"
-$btnApriDest.Location = "610,90"
-$btnApriDest.Size = "120,25"
+$btnApriDest.Location = "510,90"
 $btnApriDest.Add_Click({
-    if(Test-Path $txtDest.Text){
+    if(Test-Path -LiteralPath $txtDest.Text){
         Start-Process $txtDest.Text
     }
 })
@@ -97,133 +101,141 @@ $form.Controls.Add($chkKeepStructure)
 $lblLog = New-Object System.Windows.Forms.Label
 $lblLog.Text = "Log operazioni:"
 $lblLog.Location = "10,230"
-$lblLog.AutoSize = $true
 $form.Controls.Add($lblLog)
 
 $txtLog = New-Object System.Windows.Forms.TextBox
 $txtLog.Location = "10,260"
-$txtLog.Size = "680,160"
+$txtLog.Size = "620,160"
 $txtLog.Multiline = $true
 $txtLog.ScrollBars = "Vertical"
-$txtLog.ReadOnly = $true
 $form.Controls.Add($txtLog)
 
 ### ------ PROGRESS BAR ------ ###
 $progress = New-Object System.Windows.Forms.ProgressBar
 $progress.Location = "10,430"
-$progress.Size = "680,20"
+$progress.Size = "620,20"
 $form.Controls.Add($progress)
 
 ### ------ BOTTONE ESEGUI ------ ###
 $btnExtract = New-Object System.Windows.Forms.Button
 $btnExtract.Text = "ESTRAI ZIP"
 $btnExtract.Font = New-Object System.Drawing.Font("Segoe UI",12,[System.Drawing.FontStyle]::Bold)
-$btnExtract.Location = "280,455"
+$btnExtract.Location = "250,455"
 $btnExtract.Size = "150,35"
+
+# Helper per normalizzare i percorsi
+function Get-NormalPath {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
+    try {
+        $resolved = Resolve-Path -LiteralPath $Path -ErrorAction Stop
+        return $resolved.Path
+    } catch {
+        # Se non risolvibile (p.es. non esiste ancora), prova a costruire percorso assoluto
+        try { return [System.IO.Path]::GetFullPath($Path) } catch { return $Path }
+    }
+}
 
 $btnExtract.Add_Click({
 
-    $source = $txtSource.Text
-    $dest = $txtDest.Text
+    $source = Get-NormalPath $txtSource.Text
+    $dest   = Get-NormalPath $txtDest.Text
 
     $txtLog.AppendText("=== Avvio estrazione ===`r`n")
 
-    if(-not (Test-Path $source)){
-        [System.Windows.Forms.MessageBox]::Show("La cartella sorgente non esiste!","Errore")
+    if([string]::IsNullOrWhiteSpace($source) -or -not (Test-Path -LiteralPath $source)){
+        [System.Windows.Forms.MessageBox]::Show("La cartella sorgente non esiste o è vuota.","Errore")
         return
     }
 
-    if(-not (Test-Path $dest)){
-        [System.Windows.Forms.MessageBox]::Show("La cartella destinazione non esiste!","Errore")
+    if([string]::IsNullOrWhiteSpace($dest)){
+        [System.Windows.Forms.MessageBox]::Show("La cartella destinazione non è valida.","Errore")
         return
     }
+
+    # Crea la destinazione principale (se non esiste)
+    [void][System.IO.Directory]::CreateDirectory($dest)
 
     # Cerca ZIP
     if($chkRecursive.Checked){
-        $zipFiles = Get-ChildItem $source -Recurse -Filter *.zip -File
+        $zipFiles = Get-ChildItem -LiteralPath $source -Recurse -Filter *.zip -File
     } else {
-        $zipFiles = Get-ChildItem $source -Filter *.zip -File
+        $zipFiles = Get-ChildItem -LiteralPath $source -Filter *.zip -File
     }
 
-    if($zipFiles.Count -eq 0){
+    if(-not $zipFiles -or $zipFiles.Count -eq 0){
         [System.Windows.Forms.MessageBox]::Show("Nessun file ZIP trovato.","Info")
         return
     }
 
-    # Shell COM
-    $shell = New-Object -ComObject Shell.Application
-
-    # Calcola numero totale di file in tutti gli ZIP
-    $totalItems = 0
-    foreach ($zip in $zipFiles) {
-        $zipFolder = $shell.NameSpace($zip.FullName)
-        if ($zipFolder -ne $null) {
-            $totalItems += $zipFolder.Items().Count
-        }
-    }
-
-    if ($totalItems -eq 0){
-        [System.Windows.Forms.MessageBox]::Show("Nessun file da estrarre.","Info")
-        return
-    }
-
-    # Imposta progress bar globale
+    # Imposta progress bar a 0-100
     $progress.Minimum = 0
-    $progress.Maximum = $totalItems
+    $progress.Maximum = 100
     $progress.Value = 0
-
-    # Determina flag per CopyHere
-    # $copyFlags = 0x10   # non mostra UI
-	$copyFlags = 0x0
-    if ($chkOverwrite.Checked) {
-        # $copyFlags = $copyFlags -bor 0x4  # aggiunge sovrascrittura automatica
-		$copyFlags = 0x10   # non mostra UI
-		$copyFlags = $copyFlags -bor 0x4  # aggiunge sovrascrittura automatica
-    }
 
     foreach ($zip in $zipFiles) {
 
         $txtLog.AppendText("Apro ZIP: $($zip.FullName)`r`n")
         [System.Windows.Forms.Application]::DoEvents()
 
+        # Determina la destinazione
         if($chkKeepStructure.Checked){
-            $relativePath = $zip.DirectoryName.Substring($source.Length).TrimStart("\")
-            $extractPath = Join-Path $dest $relativePath
+            $relativePath = $zip.DirectoryName.Substring($source.Length).TrimStart('\')
+            $extractPath  = Join-Path $dest $relativePath
         } else {
-            $extractPath = $dest
+            $extractPath  = $dest
         }
 
-        if (!(Test-Path $extractPath)){
-            New-Item -ItemType Directory -Path $extractPath -Force | Out-Null
-        }
+        # Normalizza/crea la cartella di estrazione
+        [void][System.IO.Directory]::CreateDirectory($extractPath)
+
+        # Risolvi il percorso per la Shell
+        $extractPathResolved = Get-NormalPath $extractPath
 
         try {
+            $shell = New-Object -ComObject Shell.Application
             $zipFolder  = $shell.NameSpace($zip.FullName)
-            $destFolder = $shell.NameSpace($extractPath)
+            $destFolder = $shell.NameSpace($extractPathResolved)
 
             if ($zipFolder -eq $null){
                 $txtLog.AppendText("ERRORE: Il file ZIP è corrotto o non accessibile.`r`n")
                 continue
             }
+            if ($destFolder -eq $null){
+                $txtLog.AppendText("ERRORE: Impossibile aprire cartella di destinazione: $extractPathResolved`r`n")
+                continue
+            }
 
-            foreach ($item in $zipFolder.Items()) {
+            $items = $zipFolder.Items()
+            $totalEntries = $items.Count
+            if ($totalEntries -eq 0) {
+                $txtLog.AppendText("ZIP vuoto: $($zip.Name)`r`n")
+                continue
+            }
 
-                # Estrazione con flag
-                $destFolder.CopyHere($item, $copyFlags)
+            $counter = 0
 
-                # Aggiorna progress bar globale
-                $progress.Value++
+            foreach ($item in $items) {
+                $counter++
+                $percent = [math]::Floor(($counter / $totalEntries) * 100)
+                $progress.Value = [Math]::Min($progress.Maximum, $percent)
                 [System.Windows.Forms.Application]::DoEvents()
 
-                # Log
                 $txtLog.AppendText("Estrazione: $($item.Name)`r`n")
                 [System.Windows.Forms.Application]::DoEvents()
+
+                # Opzioni CopyHere:
+                # 0x10 = FOF_NOCONFIRMATION (no prompt)
+                # 0x4  = FOF_SILENT (no UI)
+                # 0x400= FOF_NOERRORUI (no error UI)
+                $options = 0x10 + 0x4 + 0x400
+                $destFolder.CopyHere($item, $options)
 
                 Start-Sleep -Milliseconds 50
             }
 
             if ($chkDelete.Checked){
-                Remove-Item $zip.FullName -Force
+                Remove-Item -LiteralPath $zip.FullName -Force
                 $txtLog.AppendText("ZIP eliminato.`r`n")
             }
 
@@ -232,14 +244,13 @@ $btnExtract.Add_Click({
         }
     }
 
+    # Assicura progress bar a 100% a fine processo
     $progress.Value = $progress.Maximum
     [System.Windows.Forms.Application]::DoEvents()
 
     [System.Windows.Forms.MessageBox]::Show("Estrazione completata!","Fatto")
     $txtLog.AppendText("=== Completato ===`r`n")
 })
-
-
 
 $form.Controls.Add($btnExtract)
 
